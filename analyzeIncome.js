@@ -500,10 +500,14 @@ const filterRefArray = (refArray, filtersObj) => {
 
 }
 
+function sleep_ms(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
-    
+    const sleep = 2000
+
     let symbol = currency + valueInCurrency
 
     let symbolIsFlipped = false
@@ -518,6 +522,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
     let endTime = startTime + 60000
     let requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
 
+    await sleep_ms(sleep) // Throttle ourselves
     let res = await fetch(requestUrl)
 
     if (res.status != 200 && res.status.toString()[0] != "4") {
@@ -541,6 +546,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
             
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
 
+            await sleep_ms(sleep) // Throttle ourselves
             res = await fetch(requestUrl)
             json = await res.json()
             // console.log(json)
@@ -550,10 +556,11 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
         }
 
         const hoursToAdd = 24
+        const attempts = 4
         let goForwardAttempts = 0
         let originalStartTime = startTime
         let originalEndTime = endTime
-        while (json.length == 0 && goForwardAttempts <= 32) {
+        while (json.length == 0 && goForwardAttempts <= attempts) {
             console.log(json)
             startTime = startTime + hoursToAdd*3600000
             endTime = endTime + hoursToAdd*3600000
@@ -562,6 +569,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
 
+            await sleep_ms(sleep) // Throttle ourselves
             res = await fetch(requestUrl)
             json = await res.json()
             goForwardAttempts++
@@ -583,13 +591,14 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
                 
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${originalStartTime}&endTime=${originalEndTime}`
 
+            await sleep_ms(sleep) // Throttle ourselves
             res = await fetch(requestUrl)
             json = await res.json()
 
             if (json.length == 0) {
                 console.log(`Flipped the symbol, and found one that returns an empty array in reverse.  Will try requesting future prices for ${symbol}`)
                 goForwardAttempts = 0
-                while (json.length == 0 && goForwardAttempts <= 28) {
+                while (json.length == 0 && goForwardAttempts <= attempts) {
                     console.log(json)
                     startTime = startTime + hoursToAdd*3600000
                     endTime = endTime + hoursToAdd*3600000
@@ -597,6 +606,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
                     requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
         
+                    await sleep_ms(sleep) // Throttle ourselves
                     res = await fetch(requestUrl)
                     json = await res.json()
                     goForwardAttempts++
