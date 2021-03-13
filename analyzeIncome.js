@@ -507,7 +507,7 @@ function sleep_ms(ms) {
 
 const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
-    const sleep = 2000
+    const sleep = 1000
 
     let symbol = currency + valueInCurrency
 
