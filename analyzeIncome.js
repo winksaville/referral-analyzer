@@ -740,9 +740,9 @@ async function addPriceToArray (arrayEntry, index, dataArray) {
 	}
 
         if ((arrayEntry["Contemporary BTC Value"] == 0) && (arrayEntry["Contemporary BNB Value"] == 0) && (arrayEntry["Contemporary USDT Value"] == 0)) {
-            console.log(`No pricing info for symbol: ${symbol} on date: ${date}. This tool will pretend that the price was zero. Binance did not return any pricing data for this item, including for several days into the future.`)
+            console.log(`No pricing info for symbol: ${currency} on date: ${date}. This tool will pretend that the price was zero. Binance did not return any pricing data for this item, including for several days into the future.`)
             priceDeterminationErrors++
-            failedPricePairs = failedPricePairs + `${symbol} for ${date}, `
+            failedPricePairs = failedPricePairs + `${currency} for ${date}, `
         }
         // arrayEntry.ethPrice = 0
         // arrayEntry.usdPrice = 0
