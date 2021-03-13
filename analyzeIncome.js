@@ -18,6 +18,7 @@ var sendProgressBarIpcMessage
 
 let lastDateWhenRefPricesWereChecked = ""
 let bnbbtcRefPrice = Decimal(0)
+let bnbusdtRefPrice = Decimal(0)
 let btcusdtRefPrice = Decimal(0)
 
 
@@ -657,9 +658,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
         }
 
         if (json.length == 0 || json.msg == "Invalid symbol.") {
-            console.log(`Skipping pricing info for symbol: ${symbol} on date: ${date}. This tool will pretend that the price was zero. Binance did not return any pricing data for this item, including for several days into the future.`)
-            priceDeterminationErrors++
-            failedPricePairs = failedPricePairs + `${symbol} for ${date}, `
+            console.log(`No pricing info for ${symbol} on date: ${date} pretend the price was zero`)
             return "0"
         } else {
             console.log("Something went wrong retrieving the price info for symbol: ", symbol)
@@ -689,10 +688,12 @@ async function addPriceToArray (arrayEntry, index, dataArray) {
         if (date != lastDateWhenRefPricesWereChecked) {
             console.log("New date series.  Getting new reference pricing info for: ", date)
             bnbbtcRefPrice = await getHistoricalValue(1, "BNB", "BTC", date)
+            bnbusdtRefPrice = await getHistoricalValue(1, "BNB", "USDT", date)
             btcusdtRefPrice = await getHistoricalValue(1, "BTC", "USDT", date)
             lastDateWhenRefPricesWereChecked = date
-            // console.log(`BNBBTC ref price for ${date}: ${bnbbtcRefPrice}`)
-            // console.log(`BTCUSDT ref price for ${date}: ${btcusdtRefPrice}`)
+            console.log(`BNBBTC ref price for ${date}: ${bnbbtcRefPrice}`)
+            console.log(`BNBUSDT ref price for ${date}: ${bnbusdtRefPrice}`)
+            console.log(`BTCUSDT ref price for ${date}: ${btcusdtRefPrice}`)
             if (priceErrorsSuccessfullyResolvedInFuture != 0 || priceDeterminationErrors != 0) {
                 console.log(`Prices resolved in future: `, priceErrorsSuccessfullyResolvedInFuture)
                 console.log(`Pairs resolved in future so far : `, jumpedForwardPricePairs)
@@ -701,11 +702,48 @@ async function addPriceToArray (arrayEntry, index, dataArray) {
             }
         }
 
-        const contempBtcValue = await getHistoricalValue(amount, currency, "BTC", date)
 
-        arrayEntry["Contemporary BTC Value"] = contempBtcValue
-        arrayEntry["Contemporary BNB Value"] = Decimal(contempBtcValue).dividedBy(bnbbtcRefPrice).toDecimalPlaces(8).toString()
-        arrayEntry["Contemporary USDT Value"] = Decimal(contempBtcValue).times(btcusdtRefPrice).toDecimalPlaces(8).toString()
+        var contempUsdtValue = 0
+        var contempBtcValue = 0
+
+        contempUsdtValue = await getHistoricalValue(amount, currency, "USDT", date)
+	if (contempUsdtValue != 0) {
+            console.log(`${currency} amount=${amount} usdtValue=${contempUsdtValue} for ${date}`)
+            arrayEntry["Contemporary USDT Value"] = contempUsdtValue
+            if (btcusdtRefPrice != 0) {
+                arrayEntry["Contemporary BTC Value"] = Decimal(contempUsdtValue).dividedBy(btcusdtRefPrice).toDecimalPlaces(8).toString()
+	    } else {
+                arrayEntry["Contemporary BTC Value"] = 0
+            }
+            if (bnbusdtRefPrice != 0) {
+                arrayEntry["Contemporary BNB Value"] = Decimal(contempUsdtValue).dividedBy(bnbusdtRefPrice).toDecimalPlaces(8).toString()
+            } else {
+                arrayEntry["Contemporary BNB Value"] = 0
+            }
+	} else {
+            contempBtcValue = await getHistoricalValue(amount, currency, "BTC", date)
+	    if (contempBtcValue != 0) {
+                console.log(`${currency} amount=${amount} btcValue=${contempBtcValue} for ${date}`)
+                arrayEntry["Contemporary BTC Value"] = contempBtcValue
+                if (bnbbtcRefPrice != 0) {
+                    arrayEntry["Contemporary BNB Value"] = Decimal(contempBtcValue).dividedBy(bnbbtcRefPrice).toDecimalPlaces(8).toString()
+                } else {
+                    arrayEntry["Contemporary BNB Value"] = 0
+                }
+                arrayEntry["Contemporary USDT Value"] = Decimal(contempBtcValue).times(btcusdtRefPrice).toDecimalPlaces(8).toString()
+	    } else {
+                console.log(`${currency} amount=${amount} no reference price all values are 0 for ${date}`)
+                arrayEntry["Contemporary BTC Value"] = 0
+                arrayEntry["Contemporary BNB Value"] = 0
+                arrayEntry["Contemporary USDT Value"] = 0
+	    }
+	}
+
+        if ((arrayEntry["Contemporary BTC Value"] == 0) && (arrayEntry["Contemporary BNB Value"] == 0) && (arrayEntry["Contemporary USDT Value"] == 0)) {
+            console.log(`No pricing info for symbol: ${symbol} on date: ${date}. This tool will pretend that the price was zero. Binance did not return any pricing data for this item, including for several days into the future.`)
+            priceDeterminationErrors++
+            failedPricePairs = failedPricePairs + `${symbol} for ${date}, `
+        }
         // arrayEntry.ethPrice = 0
         // arrayEntry.usdPrice = 0
 
@@ -820,13 +858,12 @@ const analyzeIncome = async (sendStatus, arrayOfPaths, interval, outputPath, fil
             sendStatus(`Prices added in ${timer.read()} seconds`)
 
 
-            let message = `There were ${priceErrorsSuccessfullyResolvedInFuture} times that the tool couldn't determine a price on the requested date, but for which the tool found a price at some point in the future.`
-            sendStatus(message)
-            consolidatedRefs.push({"Comment": message})
-
             if (priceErrorsSuccessfullyResolvedInFuture != 0) {
                 // sendStatus(`WARNING: That might reduce accuracy.`)
-                
+                let message = `There were ${priceErrorsSuccessfullyResolvedInFuture} times that the tool couldn't determine a price on the requested date, but for which the tool found a price at some point in the future.`
+                sendStatus(message)
+                consolidatedRefs.push({"Comment": message})
+
                 message = `These are the pairs that had to be priced in the future: ${jumpedForwardPricePairs}`
                 // sendStatus(message)
                 consolidatedRefs.push({"Comment": message})
