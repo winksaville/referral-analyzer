@@ -505,9 +505,27 @@ function sleep_ms(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function fetch_url(requestUrl, sleep) {
+    await sleep_ms(sleep) // Throttle ourselves
+    let res = await fetch(requestUrl)
+
+    if (res.status != 200 && res.status.toString()[0] != "4") {
+
+        console.log(res.status.toString()[0])
+
+        console.log("Something went wrong during price retrieval.  Here's the full response:")
+        console.log(res)
+        throw( new Error(`Hmm... something went wrong while retrieving price data from Binance.  It might be a problem with this app, or it might be that the Binance API is down for maintenance right now.  I'd recommend trying again in a little while.  Here's the HTTP error code that Binance reported: [[ ${res.status} ]] // [[ ${res.statusText} ]].  Request URL: ${requestUrl}`))
+
+    }
+    // console.log(res.status)
+
+    return res;
+}
+
 const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
-    const sleep = 1000
+    const sleep = 3000
 
     let symbol = currency + valueInCurrency
 
@@ -523,20 +541,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
     let endTime = startTime + 60000
     let requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
 
-    await sleep_ms(sleep) // Throttle ourselves
-    let res = await fetch(requestUrl)
-
-    if (res.status != 200 && res.status.toString()[0] != "4") {
-
-        console.log(res.status.toString()[0])
-
-        console.log("Something went wrong during price retrieval.  Here's the full response:")
-        console.log(res)
-        throw( new Error(`Hmm... something went wrong while retrieving price data from Binance.  It might be a problem with this app, or it might be that the Binance API is down for maintenance right now.  I'd recommend trying again in a little while.  Here's the HTTP error code that Binance reported: [[ ${res.status} ]] // [[ ${res.statusText} ]].  Request URL: ${requestUrl}`))
-
-    }
-
-    // console.log(res.status)
+    let res = await fetch_url(requestUrl, sleep)    
     let json = await res.json()
 
     try {
@@ -546,9 +551,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
             symbol = valueInCurrency + currency
             
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
-
-            await sleep_ms(sleep) // Throttle ourselves
-            res = await fetch(requestUrl)
+            res = await fetch_url(requestUrl, sleep)
             json = await res.json()
             // console.log(json)
 
@@ -569,9 +572,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
             console.log(`Trying to jump forward on symbol ${symbol} for date ${date}, forward to ${moment.utc(startTime).format()}. This is jump-forward attempt #${goForwardAttempts}`)
 
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
-
-            await sleep_ms(sleep) // Throttle ourselves
-            res = await fetch(requestUrl)
+            res = await fetch_url(requestUrl, sleep)
             json = await res.json()
             goForwardAttempts++
 
@@ -591,9 +592,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
             symbol = valueInCurrency + currency
                 
             requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${originalStartTime}&endTime=${originalEndTime}`
-
-            await sleep_ms(sleep) // Throttle ourselves
-            res = await fetch(requestUrl)
+            res = await fetch_url(requestUrl, sleep)
             json = await res.json()
 
             if (json.length == 0) {
@@ -606,9 +605,7 @@ const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
                     console.log(`Trying to jump forward on symbol ${symbol} for date ${date}, forward to ${moment.utc(startTime).format()}. This is jump-forward attempt #${goForwardAttempts}`)
 
                     requestUrl = `https://www.binance.com/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTime}&endTime=${endTime}`
-        
-                    await sleep_ms(sleep) // Throttle ourselves
-                    res = await fetch(requestUrl)
+                    res = await fetch_url(requestUrl, sleep)
                     json = await res.json()
                     goForwardAttempts++
         
@@ -688,12 +685,12 @@ async function addPriceToArray (arrayEntry, index, dataArray) {
         if (date != lastDateWhenRefPricesWereChecked) {
             console.log("New date series.  Getting new reference pricing info for: ", date)
             bnbbtcRefPrice = await getHistoricalValue(1, "BNB", "BTC", date)
-            bnbusdtRefPrice = await getHistoricalValue(1, "BNB", "USDT", date)
-            btcusdtRefPrice = await getHistoricalValue(1, "BTC", "USDT", date)
-            lastDateWhenRefPricesWereChecked = date
             console.log(`BNBBTC ref price for ${date}: ${bnbbtcRefPrice}`)
+            bnbusdtRefPrice = await getHistoricalValue(1, "BNB", "USDT", date)
             console.log(`BNBUSDT ref price for ${date}: ${bnbusdtRefPrice}`)
+            btcusdtRefPrice = await getHistoricalValue(1, "BTC", "USDT", date)
             console.log(`BTCUSDT ref price for ${date}: ${btcusdtRefPrice}`)
+            lastDateWhenRefPricesWereChecked = date
             if (priceErrorsSuccessfullyResolvedInFuture != 0 || priceDeterminationErrors != 0) {
                 console.log(`Prices resolved in future: `, priceErrorsSuccessfullyResolvedInFuture)
                 console.log(`Pairs resolved in future so far : `, jumpedForwardPricePairs)
@@ -706,38 +703,71 @@ async function addPriceToArray (arrayEntry, index, dataArray) {
         var contempUsdtValue = 0
         var contempBtcValue = 0
 
-        contempUsdtValue = await getHistoricalValue(amount, currency, "USDT", date)
-	if (contempUsdtValue != 0) {
-            console.log(`${currency} amount=${amount} usdtValue=${contempUsdtValue} for ${date}`)
-            arrayEntry["Contemporary USDT Value"] = contempUsdtValue
-            if (btcusdtRefPrice != 0) {
-                arrayEntry["Contemporary BTC Value"] = Decimal(contempUsdtValue).dividedBy(btcusdtRefPrice).toDecimalPlaces(8).toString()
-	    } else {
-                arrayEntry["Contemporary BTC Value"] = 0
-            }
-            if (bnbusdtRefPrice != 0) {
-                arrayEntry["Contemporary BNB Value"] = Decimal(contempUsdtValue).dividedBy(bnbusdtRefPrice).toDecimalPlaces(8).toString()
+        contempBtcValue = await getHistoricalValue(amount, currency, "BTC", date)
+        if (contempBtcValue != 0) {
+            console.log(`${currency} amount=${amount} btcValue=${contempBtcValue} for ${date}`)
+            arrayEntry["Contemporary BTC Value"] = contempBtcValue
+            if (bnbbtcRefPrice != 0) {
+                arrayEntry["Contemporary BNB Value"] = Decimal(contempBtcValue).dividedBy(bnbbtcRefPrice).toDecimalPlaces(8).toString()
             } else {
                 arrayEntry["Contemporary BNB Value"] = 0
             }
-	} else {
-            contempBtcValue = await getHistoricalValue(amount, currency, "BTC", date)
-	    if (contempBtcValue != 0) {
-                console.log(`${currency} amount=${amount} btcValue=${contempBtcValue} for ${date}`)
-                arrayEntry["Contemporary BTC Value"] = contempBtcValue
-                if (bnbbtcRefPrice != 0) {
-                    arrayEntry["Contemporary BNB Value"] = Decimal(contempBtcValue).dividedBy(bnbbtcRefPrice).toDecimalPlaces(8).toString()
+            arrayEntry["Contemporary USDT Value"] = Decimal(contempBtcValue).times(btcusdtRefPrice).toDecimalPlaces(8).toString()
+        } else {
+            contempUsdtValue = await getHistoricalValue(amount, currency, "USDT", date)
+            if (contempUsdtValue != 0) {
+                console.log(`${currency} amount=${amount} usdtValue=${contempUsdtValue} for ${date}`)
+                arrayEntry["Contemporary USDT Value"] = contempUsdtValue
+                if (btcusdtRefPrice != 0) {
+                    arrayEntry["Contemporary BTC Value"] = Decimal(contempUsdtValue).dividedBy(btcusdtRefPrice).toDecimalPlaces(8).toString()
+                } else {
+                        arrayEntry["Contemporary BTC Value"] = 0
+                    }
+                if (bnbusdtRefPrice != 0) {
+                    arrayEntry["Contemporary BNB Value"] = Decimal(contempUsdtValue).dividedBy(bnbusdtRefPrice).toDecimalPlaces(8).toString()
                 } else {
                     arrayEntry["Contemporary BNB Value"] = 0
                 }
-                arrayEntry["Contemporary USDT Value"] = Decimal(contempBtcValue).times(btcusdtRefPrice).toDecimalPlaces(8).toString()
-	    } else {
+            } else {
                 console.log(`${currency} amount=${amount} no reference price all values are 0 for ${date}`)
                 arrayEntry["Contemporary BTC Value"] = 0
                 arrayEntry["Contemporary BNB Value"] = 0
                 arrayEntry["Contemporary USDT Value"] = 0
-	    }
-	}
+            }
+        }
+
+        // contempUsdtValue = await getHistoricalValue(amount, currency, "USDT", date)
+        // if (contempUsdtValue != 0) {
+        //     console.log(`${currency} amount=${amount} usdtValue=${contempUsdtValue} for ${date}`)
+        //     arrayEntry["Contemporary USDT Value"] = contempUsdtValue
+        //     if (btcusdtRefPrice != 0) {
+        //         arrayEntry["Contemporary BTC Value"] = Decimal(contempUsdtValue).dividedBy(btcusdtRefPrice).toDecimalPlaces(8).toString()
+        //     } else {
+        //             arrayEntry["Contemporary BTC Value"] = 0
+        //         }
+        //     if (bnbusdtRefPrice != 0) {
+        //         arrayEntry["Contemporary BNB Value"] = Decimal(contempUsdtValue).dividedBy(bnbusdtRefPrice).toDecimalPlaces(8).toString()
+        //     } else {
+        //         arrayEntry["Contemporary BNB Value"] = 0
+        //     }
+        // } else {
+        //     contempBtcValue = await getHistoricalValue(amount, currency, "BTC", date)
+        //     if (contempBtcValue != 0) {
+        //         console.log(`${currency} amount=${amount} btcValue=${contempBtcValue} for ${date}`)
+        //         arrayEntry["Contemporary BTC Value"] = contempBtcValue
+        //         if (bnbbtcRefPrice != 0) {
+        //             arrayEntry["Contemporary BNB Value"] = Decimal(contempBtcValue).dividedBy(bnbbtcRefPrice).toDecimalPlaces(8).toString()
+        //         } else {
+        //             arrayEntry["Contemporary BNB Value"] = 0
+        //         }
+        //         arrayEntry["Contemporary USDT Value"] = Decimal(contempBtcValue).times(btcusdtRefPrice).toDecimalPlaces(8).toString()
+        //     } else {
+        //         console.log(`${currency} amount=${amount} no reference price all values are 0 for ${date}`)
+        //         arrayEntry["Contemporary BTC Value"] = 0
+        //         arrayEntry["Contemporary BNB Value"] = 0
+        //         arrayEntry["Contemporary USDT Value"] = 0
+        //     }
+        // }
 
         if ((arrayEntry["Contemporary BTC Value"] == 0) && (arrayEntry["Contemporary BNB Value"] == 0) && (arrayEntry["Contemporary USDT Value"] == 0)) {
             console.log(`No pricing info for symbol: ${currency} on date: ${date}. This tool will pretend that the price was zero. Binance did not return any pricing data for this item, including for several days into the future.`)
