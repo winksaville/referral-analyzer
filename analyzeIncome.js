@@ -525,7 +525,7 @@ async function fetch_url(requestUrl, sleep) {
 
 const getHistoricalValue = async (amount, currency, valueInCurrency, date) => {
 
-    const sleep = 3000
+    const sleep = 2000
 
     let symbol = currency + valueInCurrency
 
